@@ -75,11 +75,13 @@ _filter() {
 }
 
 # ─── Extract peer IP ──────────────────────────────────────────────────────────
+# Handles plain IPv4, IPv6, and IPv4-mapped IPv6 (::ffff:1.2.3.4)
 _peer_ips() {
   awk '{
     peer = $5
-    sub(/:[0-9]+$/, "", peer)
-    gsub(/[\[\]]/, "", peer)
+    sub(/:[0-9]+$/, "", peer)   # strip :port
+    gsub(/[\[\]]/, "", peer)    # strip IPv6 brackets
+    sub(/^::ffff:/, "", peer)   # strip IPv4-mapped IPv6 prefix
     if (peer != "" && peer != "*") print peer
   }'
 }
@@ -103,7 +105,8 @@ case "${1:-}" in
   count)
     validate_dir "${2:-}"; validate_ip "${3:-}"
     ss_tn | _filter "$2" | awk -v ip="${3}" '
-      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer); if(peer==ip) count++}
+      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer); sub(/^::ffff:/, "", peer)
+       if(peer==ip) count++}
       END{print count+0}
     '
     ;;
@@ -111,7 +114,7 @@ case "${1:-}" in
   ports)
     validate_dir "${2:-}"; validate_ip "${3:-}"
     ss_tn | _filter "$2" | awk -v ip="${3}" -v dir="$2" '
-      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer)
+      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer); sub(/^::ffff:/, "", peer)
        if(peer==ip){field=(dir=="in")?$4:$5; n=split(field,a,":"); print a[n]+0}}
     ' | sort -un | tr '\n' ',' | sed 's/,$//'
     ;;
@@ -119,7 +122,8 @@ case "${1:-}" in
   states)
     validate_dir "${2:-}"; validate_ip "${3:-}"
     ss_tn | _filter "$2" | awk -v ip="${3}" '
-      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer); if(peer==ip) print $1}
+      {peer=$5; sub(/:[0-9]+$/, "", peer); gsub(/[\[\]]/, "", peer); sub(/^::ffff:/, "", peer)
+       if(peer==ip) print $1}
     ' | sort | uniq -c \
       | awk 'BEGIN{sep=""} {printf "%s%s=%s", sep, $2, $1; sep=","}' && echo
     ;;
