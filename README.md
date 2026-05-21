@@ -7,9 +7,11 @@ A single-script installer for **Zabbix Agent 2** that automatically detects the 
 | Family | Distributions |
 |---|---|
 | Debian/Ubuntu | Ubuntu 20.04/22.04/24.04, Debian 10/11/12 |
-| RHEL-based | RHEL 7/8/9, CentOS 7/8, Rocky Linux 8/9, AlmaLinux 8/9, Oracle Linux |
+| RHEL-based | RHEL 7/8/9/10, CentOS 7/8, Rocky Linux 8/9/10, AlmaLinux 8/9/10, Oracle Linux |
 | Amazon Linux | Amazon Linux 2, Amazon Linux 2023 |
 | SUSE | SLES 15, openSUSE Leap 15 |
+
+> **EL10 note:** Zabbix 7.4+ is required for RHEL/AlmaLinux/Rocky 10. If you pass `--version 7.0` (or any older version) the script will automatically upgrade to 7.4 and warn you.
 
 ## Quick Start
 

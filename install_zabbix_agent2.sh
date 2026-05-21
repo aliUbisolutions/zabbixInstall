@@ -119,8 +119,6 @@ install_zabbix_repo_debian() {
 }
 
 install_zabbix_repo_rpm() {
-  info "Adding Zabbix ${ZABBIX_VERSION} RPM repository..."
-
   local rpm_os rpm_ver
   case "$OS_ID" in
     amzn)
@@ -135,6 +133,21 @@ install_zabbix_repo_rpm() {
       ;;
   esac
 
+  # EL10+ requires Zabbix 7.4+ and uses a different repo URL structure.
+  # Zabbix 7.0 and earlier have no EL10 packages.
+  local MIN_EL10_VERSION="7.4"
+  if [[ "$rpm_os" == "rhel" && "$rpm_ver" -ge 10 ]] 2>/dev/null; then
+    if awk "BEGIN{exit !($ZABBIX_VERSION < $MIN_EL10_VERSION)}"; then
+      warn "Zabbix ${ZABBIX_VERSION} has no packages for EL${rpm_ver}. Upgrading to ${MIN_EL10_VERSION} (minimum supported)."
+      ZABBIX_VERSION="$MIN_EL10_VERSION"
+    fi
+    info "Adding Zabbix ${ZABBIX_VERSION} RPM repository (EL${rpm_ver} — new repo layout)..."
+    local url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/release/rhel/${rpm_ver}/noarch/zabbix-release-latest.el${rpm_ver}.noarch.rpm"
+    rpm_install "$url"
+    return
+  fi
+
+  info "Adding Zabbix ${ZABBIX_VERSION} RPM repository..."
   local url="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/${rpm_os}/${rpm_ver}/x86_64/zabbix-release-${ZABBIX_VERSION}-1.el${rpm_ver}.noarch.rpm"
 
   rpm_install "$url" || {
