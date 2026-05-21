@@ -1,74 +1,101 @@
 #!/usr/bin/env bash
 # Collects TCP connection data for Zabbix Agent 2 UserParameters.
-# Usage: connections.sh discover | count <ip> | ports <ip> | states <ip>
+#
+# Usage:
+#   connections.sh discover  in|out
+#   connections.sh count     in|out  <ip>
+#   connections.sh ports     in|out  <ip>
+#   connections.sh states    in|out  <ip>
+#
+# Direction:
+#   in  — remote IPs connecting TO this host   (local port is a service port)
+#   out — remote IPs this host connects TO     (local port is ephemeral)
 
 set -euo pipefail
 
-# Validate that the argument looks like an IP address (prevents command injection)
 validate_ip() {
   if [[ ! "${1:-}" =~ ^[0-9a-fA-F.:]+$ ]]; then
-    echo "ERROR: invalid IP '${1:-}'" >&2
-    exit 1
+    echo "ERROR: invalid IP '${1:-}'" >&2; exit 1
   fi
 }
 
-# Extract the remote (peer) IP from ss output, stripping the port suffix.
-# Handles IPv4 (1.2.3.4:port) and IPv6 ([::1]:port).
-_parse_remote_ips() {
-  awk 'NR>1 && NF>=5 {
+validate_dir() {
+  if [[ "${1:-}" != "in" && "${1:-}" != "out" ]]; then
+    echo "ERROR: direction must be 'in' or 'out'" >&2; exit 1
+  fi
+}
+
+# Read the kernel's ephemeral port range (typically 32768–60999 on Linux).
+# Local port < eph_low  → service port → this host is the server (incoming).
+# Local port >= eph_low → ephemeral   → this host is the client (outgoing).
+_eph_low() { awk '{print $1}' /proc/sys/net/ipv4/ip_local_port_range 2>/dev/null || echo 32768; }
+
+# Parse ss -tn output, filter by direction, and print matching rows.
+_filter() {
+  local dir="$1"
+  local eph_low; eph_low=$(_eph_low)
+  awk -v dir="$dir" -v eph_low="$eph_low" '
+    NR>1 && NF>=5 {
+      # local address is $4; port is the last colon-separated field
+      n = split($4, a, ":")
+      local_port = a[n] + 0
+      if (dir == "in"  && local_port <  eph_low) { print; next }
+      if (dir == "out" && local_port >= eph_low) { print; next }
+    }
+  '
+}
+
+# Extract the peer IP (strip port and IPv6 brackets) from filtered rows.
+_peer_ips() {
+  awk '{
     peer = $5
-    sub(/:[0-9]+$/, "", peer)   # strip :port
-    gsub(/[\[\]]/, "", peer)    # strip IPv6 brackets
+    sub(/:[0-9]+$/, "", peer)
+    gsub(/[\[\]]/, "", peer)
     if (peer != "" && peer != "*") print peer
   }'
 }
 
 case "${1:-}" in
   discover)
-    mapfile -t ips < <(ss -tn 2>/dev/null | _parse_remote_ips | sort -u)
+    validate_dir "${2:-}"
+    mapfile -t ips < <(ss -tn 2>/dev/null | _filter "$2" | _peer_ips | sort -u)
     if [[ ${#ips[@]} -eq 0 ]]; then
       echo '{"data":[]}'
     else
-      sep=""
-      out='{"data":['
+      sep=""; out='{"data":['
       for ip in "${ips[@]}"; do
-        out+="${sep}{\"{#IP}\":\"${ip}\"}"
-        sep=","
+        out+="${sep}{\"{#IP}\":\"${ip}\"}"; sep=","
       done
-      out+="]}"
-      echo "$out"
+      echo "${out}]}"
     fi
     ;;
 
   count)
-    validate_ip "${2:-}"
-    ss -tn dst "${2}" 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' '
+    validate_dir "${2:-}"; validate_ip "${3:-}"
+    ss -tn dst "${3}" 2>/dev/null | _filter "$2" | wc -l | tr -d ' '
     ;;
 
   ports)
-    validate_ip "${2:-}"
-    # Return comma-separated sorted unique local ports (the services being hit)
-    ss -tn dst "${2}" 2>/dev/null \
-      | awk 'NR>1 && NF>=5 {print $4}' \
-      | awk -F: '{print $NF}' \
-      | sort -un \
-      | tr '\n' ',' \
-      | sed 's/,$//'
+    validate_dir "${2:-}"; validate_ip "${3:-}"
+    # For "in": show local (service) ports. For "out": show remote (destination) ports.
+    ss -tn dst "${3}" 2>/dev/null | _filter "$2" \
+      | awk -v dir="$2" '{
+          field = (dir == "in") ? $4 : $5
+          n = split(field, a, ":")
+          print a[n] + 0
+        }' \
+      | sort -un | tr '\n' ',' | sed 's/,$//'
     ;;
 
   states)
-    validate_ip "${2:-}"
-    # Return state=count pairs, e.g. "ESTAB=3,TIME-WAIT=1"
-    ss -tn dst "${2}" 2>/dev/null \
-      | awk 'NR>1 {print $1}' \
-      | sort \
-      | uniq -c \
-      | awk 'BEGIN{sep=""} {printf "%s%s=%s", sep, $2, $1; sep=","}'
-    echo
+    validate_dir "${2:-}"; validate_ip "${3:-}"
+    ss -tn dst "${3}" 2>/dev/null | _filter "$2" \
+      | awk '{print $1}' | sort | uniq -c \
+      | awk 'BEGIN{sep=""} {printf "%s%s=%s", sep, $2, $1; sep=","}' && echo
     ;;
 
   *)
-    echo "Usage: $0 discover | count <ip> | ports <ip> | states <ip>" >&2
+    echo "Usage: $0 discover in|out | count in|out <ip> | ports in|out <ip> | states in|out <ip>" >&2
     exit 1
     ;;
 esac
