@@ -12,7 +12,8 @@ success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 [[ $EUID -ne 0 ]] && error "Run as root (sudo)."
-command -v ss &>/dev/null || error "'ss' not found. Install iproute2: dnf install iproute / apt install iproute2"
+command -v ss &>/dev/null       || error "'ss' not found. Install iproute2."
+command -v nsenter &>/dev/null  || error "'nsenter' not found. Install util-linux."
 
 info "Installing connection monitor script..."
 install -d /etc/zabbix/scripts
@@ -21,12 +22,23 @@ install -m 0755 -o root -g root "${SCRIPT_DIR}/connections.sh" /etc/zabbix/scrip
 info "Installing UserParameter configuration..."
 install -m 0644 -o root -g root "${SCRIPT_DIR}/connections.conf" /etc/zabbix/zabbix_agent2.d/connections.conf
 
+info "Granting zabbix user permission to run nsenter (needed for container inspection)..."
+SUDOERS_FILE="/etc/sudoers.d/zabbix-nsenter"
+cat > "$SUDOERS_FILE" <<'EOF'
+# Allow Zabbix agent to inspect Docker container network namespaces
+zabbix ALL=(root) NOPASSWD: /usr/bin/nsenter
+EOF
+chmod 0440 "$SUDOERS_FILE"
+visudo -cf "$SUDOERS_FILE" || { rm -f "$SUDOERS_FILE"; error "sudoers syntax check failed."; }
+
 info "Restarting zabbix-agent2..."
 systemctl restart zabbix-agent2
 systemctl --no-pager status zabbix-agent2 --lines=0
 
 success "Connection monitor deployed."
 echo ""
-echo "Test with:"
-echo "  sudo -u zabbix /etc/zabbix/scripts/connections.sh discover"
-echo "  zabbix_get -s 127.0.0.1 -p 10050 -k 'connections.discover'"
+echo "Test host-level connections:"
+echo "  sudo -u zabbix /etc/zabbix/scripts/connections.sh discover in"
+echo ""
+echo "Test container connections:"
+echo "  sudo -u zabbix /etc/zabbix/scripts/connections.sh --container disney_security_gantry discover in"
