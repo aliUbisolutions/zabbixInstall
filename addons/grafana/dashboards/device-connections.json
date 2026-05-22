@@ -1,0 +1,106 @@
+{
+  "title": "Disney Laundry — Device Connections",
+  "uid": "disney-connections",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Connected Devices",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": 0 },
+              { "color": "yellow","value": 1 },
+              { "color": "green", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "alexanderzobnin-zabbix-datasource" },
+          "group": { "filter": "" },
+          "host": { "filter": "UbiManager Disney Laundry" },
+          "application": { "filter": "" },
+          "item": { "filter": "/Device .* — connection count/" },
+          "functions": [{ "name": "countNotNull", "params": [], "added": true }],
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Connections per Device (last 3 hours)",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short",
+          "min": 0
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "alexanderzobnin-zabbix-datasource" },
+          "group": { "filter": "" },
+          "host": { "filter": "UbiManager Disney Laundry" },
+          "application": { "filter": "" },
+          "item": { "filter": "/Device .* — connection count/" },
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Current Device Status",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 10 },
+      "options": {
+        "sortBy": [{ "displayName": "Device", "desc": false }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "alexanderzobnin-zabbix-datasource" },
+          "group": { "filter": "" },
+          "host": { "filter": "UbiManager Disney Laundry" },
+          "application": { "filter": "" },
+          "item": { "filter": "/Device .* — connection count/" },
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "alexanderzobnin-zabbix-datasource" },
+          "group": { "filter": "" },
+          "host": { "filter": "UbiManager Disney Laundry" },
+          "application": { "filter": "" },
+          "item": { "filter": "/Device .* — ports/" },
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "alexanderzobnin-zabbix-datasource" },
+          "group": { "filter": "" },
+          "host": { "filter": "UbiManager Disney Laundry" },
+          "application": { "filter": "" },
+          "item": { "filter": "/Device .* — states/" },
+          "refId": "C"
+        }
+      ]
+    }
+  ]
+}
