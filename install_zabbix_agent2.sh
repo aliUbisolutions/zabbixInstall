@@ -137,7 +137,7 @@ install_zabbix_repo_rpm() {
   # Zabbix 7.0 and earlier have no EL10 packages.
   local MIN_EL10_VERSION="7.4"
   if [[ "$rpm_os" == "rhel" && "$rpm_ver" -ge 10 ]] 2>/dev/null; then
-    if awk "BEGIN{exit !($ZABBIX_VERSION < $MIN_EL10_VERSION)}"; then
+    if awk "BEGIN{exit !(${ZABBIX_VERSION} < ${MIN_EL10_VERSION})}"; then
       warn "Zabbix ${ZABBIX_VERSION} has no packages for EL${rpm_ver}. Upgrading to ${MIN_EL10_VERSION} (minimum supported)."
       ZABBIX_VERSION="$MIN_EL10_VERSION"
     fi
@@ -207,6 +207,15 @@ CONF
   success "Configuration written."
 }
 
+# ─── Docker socket access ─────────────────────────────────────────────────────
+docker_group() {
+  if command -v docker &>/dev/null && getent group docker &>/dev/null; then
+    info "Docker detected — adding zabbix user to docker group..."
+    usermod -aG docker zabbix
+    success "zabbix added to docker group (agent restart will apply it)."
+  fi
+}
+
 # ─── Service management ───────────────────────────────────────────────────────
 enable_service() {
   info "Enabling and starting zabbix-agent2 service..."
@@ -273,6 +282,7 @@ main() {
 
   install_agent
   configure_agent
+  docker_group
   enable_service
   firewall_hint
 
